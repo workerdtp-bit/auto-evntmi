@@ -43,8 +43,8 @@ def create_driver():
     chrome_options.add_argument("--log-level=3")
     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-    #service = Service(ChromeDriverManager().install())# chay online
-    service = Service(r"D:\chromedriver\chromedriver.exe") #chay LOCAL
+    service = Service(ChromeDriverManager().install())# chay online
+    #service = Service(r"D:\chromedriver\chromedriver.exe") #chay LOCAL
     return webdriver.Chrome(service=service, options=chrome_options)
 
 
