@@ -23,12 +23,18 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 
 # ================= CONFIG =================
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8')
+except:
+    pass
+
 processed = 0
 total = 0
 lock = threading.Lock()
 csv_lock = threading.Lock()
 
-SPREADSHEET_ID = "1FVu_-BWCk_c7rjtC5ovq4wSish8U7bx3ay-KhNiYqXY"
+SPREADSHEET_ID = "1tF_Oy6ZKJpNSAj9ElrUZIyHrw-ri4EPiESE_12CCHCw"
 TARGET_SHEET = "upload"
 
 # ================= DRIVER =================
@@ -39,15 +45,19 @@ def create_driver(driver_path):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-blink-features=AutomationControlled")
 
     service = Service(driver_path)
-    return webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.set_page_load_timeout(30)
+    return driver
 
-# ================= SCRAPE (RETRY 3 LẦN) =================
+# ================= SCRAPE =================
 def scrape(driver, ma_kh):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    for i in range(3):
+    # Ghi nhận thời gian bắt đầu tra cứu cho mã này
+    thoi_gian_tra_cuu = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    for _ in range(2):  # retry 2 lần nếu lỗi
         try:
             driver.get("https://cskh.evnspc.vn/TraCuu/LichNgungGiamCungCapDien")
 
@@ -59,37 +69,35 @@ def scrape(driver, ma_kh):
             input_el.send_keys(ma_kh)
             input_el.send_keys(Keys.RETURN)
 
+            # Chờ bảng kết quả xuất hiện
             WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located(
-                    (By.ID, "idThongTinLichNgungGiamMaKhachHang")
-                )
+                EC.presence_of_element_located((By.ID, "idThongTinLichNgungGiamMaKhachHang"))
             )
 
-            time.sleep(2)
+            time.sleep(2) # Chờ dữ liệu render xong hoàn toàn
 
             content = driver.find_element(
                 By.ID, "idThongTinLichNgungGiamMaKhachHang"
-            ).get_attribute("innerText")
+            ).text.strip()
 
             return {
                 "Ma_KH": ma_kh,
-                "Thoi_gian_tra_cuu": now,
+                "Thoi_gian": thoi_gian_tra_cuu,
                 "Noi_dung": content
             }
 
         except Exception:
-            time.sleep(2 * (i + 1))
+            time.sleep(2)
 
     return {
         "Ma_KH": ma_kh,
-        "Thoi_gian_tra_cuu": now,
-        "Noi_dung": "Lỗi"
+        "Thoi_gian": thoi_gian_tra_cuu,
+        "Noi_dung": "Lỗi: Không tìm thấy dữ liệu hoặc timeout"
     }
 
 # ================= WORKER =================
 def worker(data, driver_path, output):
     global processed
-
     driver = create_driver(driver_path)
     buffer = []
 
@@ -106,7 +114,7 @@ def worker(data, driver_path, output):
                 write_csv(output, buffer)
                 buffer = []
 
-            time.sleep(random.uniform(1.5, 2.5))
+            time.sleep(random.uniform(1.5, 3))
 
         if buffer:
             write_csv(output, buffer)
@@ -115,84 +123,76 @@ def worker(data, driver_path, output):
         driver.quit()
 
 # ================= CSV =================
-def write_csv(file, rows):
+def write_csv(file, rows, mode='a', header=False):
     with csv_lock:
-        file_exists = os.path.exists(file)
-
-        with open(file, "a", newline="", encoding="utf-8-sig") as f:
+        with open(file, mode, newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["Ma_KH", "Thoi_gian_tra_cuu", "Noi_dung"]
+                fieldnames=["Ma_KH", "Thoi_gian", "Noi_dung"]
             )
-            if not file_exists:
+            if header:
                 writer.writeheader()
             writer.writerows(rows)
 
-# ================= CLEAN DATA (FIX GOOGLE SHEETS ERROR) =================
-def clean(value):
-    if isinstance(value, str):
-        return re.sub(r"[\x00-\x1F\x7F-\x9F]", "", value)
-    return value
-
 # ================= PROCESS =================
 def process(input_csv):
-    df = pd.read_csv(input_csv).fillna("")
+    print("🧹 Đang xử lý dữ liệu thô...")
+    df = pd.read_csv(input_csv)
     rows = []
 
     for _, row in df.iterrows():
         text = str(row["Noi_dung"])
-        ma_kh = row["Ma_KH"]
-        time_query = row["Thoi_gian_tra_cuu"]
+        tg_tra_cuu = row["Thoi_gian"]
 
-        kh = re.search(r"KHÁCH HÀNG:\s*(.+)", text)
-        dc = re.search(r"ĐỊA CHỈ:\s*(.+)", text)
+        # Tìm tên khách hàng và địa chỉ (thường nằm ở đầu văn bản)
+        kh_match = re.search(r"KHÁCH HÀNG:\s*(.+)", text)
+        dc_match = re.search(r"ĐỊA CHỈ:\s*(.+)", text)
 
-        kh = kh.group(1).strip() if kh else ""
-        dc = dc.group(1).strip() if dc else ""
+        kh = kh_match.group(1).strip() if kh_match else ""
+        dc = dc_match.group(1).strip() if dc_match else ""
 
+        # Chia nhỏ các block nếu một khách hàng có nhiều lịch cúp điện
         blocks = re.split(r"(?=MÃ.*?LỊCH)", text, flags=re.IGNORECASE)
 
         for b in blocks:
             ma = re.search(r"MÃ.*LỊCH:\s*(\d+)", b)
+            # Regex bắt định dạng: từ 07g00 ngày 20/05/2024 đến 17g00 ngày 20/05/2024
             tg = re.search(r"từ (.+?) ngày (.+?) đến (.+?) ngày (.+)", b)
             lydo = re.search(r"LÝ DO.*:\s*(.+)", b)
 
             if ma and tg:
                 rows.append([
-                    ma_kh,
-                    time_query,
-                    kh,
-                    dc,
+                    row["Ma_KH"], kh, dc,
                     ma.group(1),
-                    tg.group(2),
-                    tg.group(1),
-                    tg.group(4),
-                    tg.group(3),
-                    lydo.group(1) if lydo else ""
+                    tg.group(2), tg.group(1),
+                    tg.group(4), tg.group(3),
+                    lydo.group(1).strip() if lydo else "",
+                    tg_tra_cuu
                 ])
 
     df2 = pd.DataFrame(rows, columns=[
-        "Ma_KH",
-        "Thoi_gian_tra_cuu",
-        "Khach_hang",
-        "Dia_chi",
-        "Ma_lich",
-        "Ngay_BD",
-        "Gio_BD",
-        "Ngay_KT",
-        "Gio_KT",
-        "Ly_do"
+        "Ma_KH", "Khach_hang", "Dia_chi",
+        "Ma_lich", "Ngay_BD", "Gio_BD",
+        "Ngay_KT", "Gio_KT", "Ly_do",
+        "Thoi_gian_tra_cuu"
     ])
 
+    # Lưu file Excel cục bộ
     df2.to_excel("output.xlsx", index=False)
+    print("📁 Đã xuất file output.xlsx")
+    
+    # Upload lên Google Sheets
     upload_sheet(df2)
 
 # ================= GOOGLE SHEETS =================
 def upload_sheet(df):
     try:
         raw = os.getenv("GCP_JSON")
-        raw = raw.replace("\\n", "\n")
+        if not raw:
+            print("⚠️ Bỏ qua upload: Thiếu biến môi trường GCP_JSON")
+            return
 
+        raw = raw.replace("\\\\n", "\\n")
         info = json.loads(raw)
         info["private_key"] = info["private_key"].replace("\\n", "\n")
 
@@ -209,52 +209,56 @@ def upload_sheet(df):
         try:
             ws = sheet.worksheet(TARGET_SHEET)
         except WorksheetNotFound:
-            ws = sheet.add_worksheet(title=TARGET_SHEET, rows="2000", cols="20")
+            ws = sheet.add_worksheet(title=TARGET_SHEET, rows="1000", cols="20")
 
         ws.clear()
-
-        df = df.applymap(clean)
-
+        # Chuyển DataFrame thành list of lists để update
         data = [df.columns.tolist()] + df.astype(str).values.tolist()
+        ws.update(range_name="A1", values=data)
 
-        ws.update(
-            range_name="A1",
-            values=json.loads(json.dumps(data, ensure_ascii=False))
-        )
-
-        print("✅ Upload Google Sheets OK")
+        print("✅ Upload Google Sheets thành công!")
 
     except Exception as e:
-        print("❌ Sheet lỗi:", e)
+        print("❌ Lỗi Google Sheets:", e)
 
 # ================= MAIN =================
 if __name__ == "__main__":
     file_input = "makh_list.csv"
     file_raw = "raw.csv"
 
+    if not os.path.exists(file_input):
+        print(f"❌ Không tìm thấy file {file_input}. Vui lòng chuẩn bị danh sách mã khách hàng.")
+        sys.exit()
+
     with open(file_input, encoding="utf-8") as f:
         data = [r[0] for r in csv.reader(f) if r]
 
     total = len(data)
+    print(f"🚀 Bắt đầu cào {total} mã khách hàng với 4 luồng...")
 
     driver_path = ChromeDriverManager().install()
 
-    # reset file
-    with open(file_raw, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["Ma_KH", "Thoi_gian_tra_cuu", "Noi_dung"]
-        )
-        writer.writeheader()
+    # Khởi tạo file raw mới với tiêu đề
+    write_csv(file_raw, [], mode="w", header=True)
 
     threads = 4
+    # Chia nhỏ data cho các luồng
     chunks = [data[i::threads] for i in range(threads)]
+
+    start_time = time.time()
 
     with ThreadPoolExecutor(max_workers=threads) as ex:
         futures = [ex.submit(worker, c, driver_path, file_raw) for c in chunks]
         for f in as_completed(futures):
-            f.result()
+            try:
+                f.result()
+            except Exception as e:
+                print(f"❌ Luồng gặp lỗi: {e}")
 
-    process(file_raw)
+    # Xử lý file raw thành file kết quả cuối cùng
+    if os.path.exists(file_raw):
+        process(file_raw)
 
-    print("🏁 DONE")
+    end_time = time.time()
+    duration = round(end_time - start_time, 2)
+    print(f"🏁 HOÀN THÀNH trong {duration} giây.")
