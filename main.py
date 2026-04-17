@@ -53,7 +53,7 @@ def create_driver(driver_path):
 def scrape(driver, ma_kh):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for attempt in range(3):  # retry 3 lần
+    for i in range(3):  # retry 3 lần
         try:
             driver.get("https://cskh.evnspc.vn/TraCuu/LichNgungGiamCungCapDien")
 
@@ -84,7 +84,7 @@ def scrape(driver, ma_kh):
             }
 
         except Exception:
-            time.sleep(2 * (attempt + 1))
+            time.sleep(2 * (i + 1))
 
     return {
         "Ma_KH": ma_kh,
@@ -112,7 +112,7 @@ def worker(data, driver_path, output):
                 write_csv(output, buffer)
                 buffer = []
 
-            time.sleep(random.uniform(1.5, 3))
+            time.sleep(random.uniform(1.2, 2.5))
 
         if buffer:
             write_csv(output, buffer)
@@ -120,7 +120,7 @@ def worker(data, driver_path, output):
     finally:
         driver.quit()
 
-# ================= CSV (FIX QUAN TRỌNG) =================
+# ================= CSV =================
 def write_csv(file, rows):
     with csv_lock:
         file_exists = os.path.exists(file)
@@ -135,6 +135,12 @@ def write_csv(file, rows):
                 writer.writeheader()
 
             writer.writerows(rows)
+
+# ================= CLEAN TEXT (FIX GOOGLE SHEETS ERROR) =================
+def clean_text(value):
+    if isinstance(value, str):
+        return re.sub(r"[\x00-\x1F\x7F]", "", value)
+    return value
 
 # ================= PROCESS =================
 def process(input_csv):
@@ -214,8 +220,15 @@ def upload_sheet(df):
             ws = sheet.add_worksheet(title=TARGET_SHEET, rows="1000", cols="20")
 
         ws.clear()
+
+        df = df.applymap(clean_text)
+
         data = [df.columns.tolist()] + df.astype(str).values.tolist()
-        ws.update(range_name="A1", values=data)
+
+        ws.update(
+            range_name="A1",
+            values=json.loads(json.dumps(data, ensure_ascii=False))
+        )
 
         print("✅ Upload Google Sheets OK")
 
@@ -234,8 +247,10 @@ if __name__ == "__main__":
 
     driver_path = ChromeDriverManager().install()
 
-    # FIX lỗi bạn gặp trước đó
-    write_csv(file_raw, [])
+    # reset file
+    with open(file_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Ma_KH", "Thoi_gian_tra_cuu", "Noi_dung"])
+        writer.writeheader()
 
     threads = 4
     chunks = [data[i::threads] for i in range(threads)]
