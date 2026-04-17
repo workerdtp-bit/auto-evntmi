@@ -2,7 +2,7 @@ name: EVN Scraper Daily
 
 on:
   schedule:
-    # 11:10 UTC tương ứng với 18:10 giờ Việt Nam (GMT+7)
+    # 12:10 UTC tương ứng với 19:10 giờ Việt Nam (GMT+7)
     # Chạy hàng ngày để đảm bảo cập nhật dữ liệu liên tục
     - cron: '10 11 * * *'
   workflow_dispatch: # Cho phép bạn bấm nút "Run workflow" để chạy tay bất cứ lúc nào
