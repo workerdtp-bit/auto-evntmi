@@ -1,0 +1,49 @@
+name: EVN Scraper Daily
+
+on:
+  schedule:
+    # 11:10 UTC tương ứng với 18:10 giờ Việt Nam (GMT+7)
+    # Chạy hàng ngày để đảm bảo cập nhật dữ liệu liên tục
+    - cron: '10 11 * * *'
+  workflow_dispatch: # Cho phép bạn bấm nút "Run workflow" để chạy tay bất cứ lúc nào
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Đặt giới hạn 4 tiếng (240 phút) để an toàn cho 2000 mã, 
+    # tránh trường hợp script bị treo làm cạn kiệt phút của GitHub.
+    timeout-minutes: 240 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          # Cache pip giúp các lần chạy sau cài đặt thư viện nhanh hơn
+          cache: 'pip' 
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium pandas webdriver-manager openpyxl gspread google-auth
+
+      - name: Run scraper
+        env:
+          GCP_JSON: ${{ secrets.GCP_JSON }}
+        # Thêm biến PYTHONUNBUFFERED để log (ví dụ: 1/2000) hiện ra ngay lập tức
+        run: |
+          export PYTHONUNBUFFERED=1
+          python main.py
+
+      - name: Upload results
+        # Luôn chạy bước này kể cả khi bước cào dữ liệu gặp lỗi giữa chừng
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: evn-result
+          path: |
+            datasauget.csv
+            output.xlsx
