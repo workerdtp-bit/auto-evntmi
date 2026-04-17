@@ -1,14 +1,13 @@
 # Auto EVN Tool
 
-Tool tự động lấy và upload dữ liệu EVN
+## 🚀 Chức năng
+- Đọc mã KH từ Google Sheets
+- Tự động tra cứu lịch cắt điện EVN
+- Ghi kết quả ra:
+  - Google Sheets
+  - CSV
+  - Excel
 
-## 📌 Chức năng
-- getevndtp.py: lấy dữ liệu
-- datadtp.py: xử lý dữ liệu
-- uploaddtp.py: upload dữ liệu
-
-## 🚀 Cách chạy
+## ⚙️ Cài đặt
 ```bash
-python getevndtp.py
-python datadtp.py
-python uploaddtp.py
+pip install -r requirements.txt
