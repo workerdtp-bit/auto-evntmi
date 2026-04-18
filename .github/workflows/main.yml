@@ -13,6 +13,8 @@ jobs:
     # Đặt giới hạn 4 tiếng (240 phút) để an toàn cho 2000 mã, 
     # tránh trường hợp script bị treo làm cạn kiệt phút của GitHub.
     timeout-minutes: 240 
+    env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       - name: Checkout code
