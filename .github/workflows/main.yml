@@ -4,7 +4,7 @@ on:
   schedule:
     # 12:10 UTC tương ứng với 19:10 giờ Việt Nam (GMT+7)
     # Chạy hàng ngày để đảm bảo cập nhật dữ liệu liên tục
-    - cron: '00 01 * * *'
+    - cron: '00 04 * * 6'
   workflow_dispatch: # Cho phép bạn bấm nút "Run workflow" để chạy tay bất cứ lúc nào
 
 jobs:
