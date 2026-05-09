@@ -1,4 +1,4 @@
-name: EVN Scraper Daily
+name: EVN get data
 
 on:
   schedule:
