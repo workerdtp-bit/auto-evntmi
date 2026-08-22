@@ -6,6 +6,10 @@ on:
     - cron: '00 01 * * 1,2,3,4,5'
   workflow_dispatch: 
 
+# Cấp quyền Ghi cho GITHUB_TOKEN để Keepalive Action có thể tự động commit
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,3 +50,10 @@ jobs:
           path: |
             datasauget.csv
             output.xlsx
+
+      # Tự động tạo commit giữ cho Workflow không bị dừng sau 60 ngày
+      - name: Auto Keepalive
+        uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          commit_message: "chore: auto keepalive [skip ci]"
+          time_elapsed: 45
