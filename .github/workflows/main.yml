@@ -11,9 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240 
 
-    # Cấp quyền ghi đúng vị trí bên trong job
+    # Cấp đầy đủ quyền cho Actions và Contents để tránh bị chặn truy cập
     permissions:
       contents: write
+      actions: write
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -49,8 +50,9 @@ jobs:
             datasauget.csv
             output.xlsx
 
+      # Sử dụng Action Keepalive thế hệ mới an toàn và nhẹ hơn
       - name: Auto Keepalive
-        uses: gautamkrishnar/keepalive-workflow@v2
+        uses: entepotenz/keep-github-actions-alive-min-dependencies@v1
         with:
-          commit_message: "chore: auto keepalive [skip ci]"
-          time_elapsed: 45
+          COMMIT_MESSAGE: "chore: auto keepalive [skip ci]"
+          TIME_ELAPSED_THRESHOLD_IN_DAYS: 45
