@@ -6,21 +6,19 @@ on:
     - cron: '00 01 * * 1,2,3,4,5'
   workflow_dispatch: 
 
-# Cấp quyền Ghi cho GITHUB_TOKEN để Keepalive Action có thể tự động commit
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 240 
-    
-    # Sửa lỗi căn lề (indentation) cho biến môi trường
+
+    # Cấp quyền ghi đúng vị trí bên trong job
+    permissions:
+      contents: write
+
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      # Cập nhật lên các phiên bản vá lỗi để tương thích hoàn toàn với Node 24
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -51,7 +49,6 @@ jobs:
             datasauget.csv
             output.xlsx
 
-      # Tự động tạo commit giữ cho Workflow không bị dừng sau 60 ngày
       - name: Auto Keepalive
         uses: gautamkrishnar/keepalive-workflow@v2
         with:
